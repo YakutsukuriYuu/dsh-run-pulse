@@ -1,0 +1,42 @@
+{
+  "name": "dsh-run-pulse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "折叠的工作区（文件夹）里有会话在运行 / 等待你操作 / 有未读完成时，文件夹标题行出现呼吸脉动的小圆点。",
+  "icon": "./icon.svg",
+  "scripts": {
+    "build": "node scripts/build-client.mjs --write",
+    "check": "node scripts/build-client.mjs",
+    "test": "node scripts/build-client.mjs && node test/status.test.mjs && node test/decorator.test.mjs && node test/client.test.mjs && node test/bundle.test.mjs"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src",
+    "scripts",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/*.json",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-client-ui-session"
+      ]
+    }
+  }
+}

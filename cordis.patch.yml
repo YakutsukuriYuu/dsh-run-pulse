@@ -1,0 +1,5 @@
+# dsh-run-pulse：把本包插入 profile 的 loader 树。
+# Host 半边是空实现，真正的逻辑全在 Client 半边（Web）。
+- insert:
+    - id: run-pulse
+      name: dsh-run-pulse

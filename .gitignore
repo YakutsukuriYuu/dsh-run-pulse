@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# 依赖（本包零运行时依赖，出现即为误装）
+node_modules/
+
+# 构建/日志临时产物
+*.log

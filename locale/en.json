@@ -1,0 +1,14 @@
+{
+  "running.one": "Running",
+  "running.other": "{n} sessions running",
+  "running.withPending": "{n} running (some waiting for you)",
+  "pending.approval": "Waiting for your approval",
+  "pending.plan": "Plan awaiting review",
+  "pending.question": "Waiting for your answer",
+  "pending.other": "{n} sessions waiting for you",
+  "unread.one": "1 finished session you have not viewed",
+  "unread.other": "{n} finished sessions you have not viewed",
+  "rail.running": "A session is running",
+  "rail.pending": "A session is waiting for you",
+  "rail.unread": "Unviewed finished results"
+}

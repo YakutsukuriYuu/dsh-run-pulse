@@ -1,0 +1,14 @@
+{
+  "running.one": "正在运行",
+  "running.other": "{n} 个会话正在运行",
+  "running.withPending": "{n} 个会话正在运行（含等待你操作的会话）",
+  "pending.approval": "等待你审批",
+  "pending.plan": "等待你确认计划",
+  "pending.question": "等待你回答",
+  "pending.other": "{n} 个会话在等你操作",
+  "unread.one": "有 1 个已完成但未查看的会话",
+  "unread.other": "有 {n} 个已完成但未查看的会话",
+  "rail.running": "有会话正在运行",
+  "rail.pending": "有会话在等你操作",
+  "rail.unread": "有未查看的完成结果"
+}
