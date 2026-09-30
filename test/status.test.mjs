@@ -13,14 +13,17 @@ const workspaces = {
 	items: [
 		{ workspaceId: 'ws-a', title: 'A 项目', path: '/tmp/a', sessionIds: ['s-run', 's-idle', 's-archived'] },
 		{ workspaceId: 'ws-b', title: 'B 项目', path: '/tmp/b', sessionIds: ['s-pending', 's-unread'] },
-		{ workspaceId: 'ws-c', title: 'C 项目', path: '/tmp/c', sessionIds: [] }
+		{ workspaceId: 'ws-c', title: 'C 项目', path: '/tmp/c', sessionIds: [] },
+		{ workspaceId: 'ws-parent', title: '树根项目', path: '/projects/root', sessionIds: ['s-root'] },
+		{ workspaceId: 'ws-child', title: '树内子项目', path: '/projects/root/child', sessionIds: ['s-child'] },
+		{ workspaceId: 'ws-neighbor', title: '相似前缀项目', path: '/projects/rooted', sessionIds: ['s-neighbor'] }
 	],
 	archivedSessionIds: ['s-archived'],
 	pinnedSessionIds: []
 };
 
 const sessions = {
-	ids: ['s-run', 's-idle', 's-archived', 's-pending', 's-unread', 's-loose', 's-subagent'],
+	ids: ['s-run', 's-idle', 's-archived', 's-pending', 's-unread', 's-loose', 's-subagent', 's-root', 's-child', 's-neighbor'],
 	byId: {
 		's-run': { id: 's-run', displayTitle: '跑着的会话', running: true, origin: 'main' },
 		's-idle': { id: 's-idle', displayTitle: '空闲会话', running: false },
@@ -28,7 +31,10 @@ const sessions = {
 		's-pending': { id: 's-pending', displayTitle: '等审批的会话', running: true },
 		's-unread': { id: 's-unread', displayTitle: '刚跑完的会话', running: false },
 		's-loose': { id: 's-loose', displayTitle: '没归属的会话', running: true },
-		's-subagent': { id: 's-subagent', displayTitle: '子代理', running: true, origin: 'subagent' }
+		's-subagent': { id: 's-subagent', displayTitle: '子代理', running: true, origin: 'subagent' },
+		's-root': { id: 's-root', displayTitle: '根目录会话', running: false },
+		's-child': { id: 's-child', displayTitle: '子目录会话', running: true },
+		's-neighbor': { id: 's-neighbor', displayTitle: '相似前缀会话', running: true }
 	}
 };
 
@@ -37,7 +43,10 @@ const statuses = new Map([
 	['s-pending', { running: true, pendingInteraction: 'approval', completionUnread: false }],
 	['s-unread', { running: false, pendingInteraction: undefined, completionUnread: true }],
 	['s-loose', { running: true, pendingInteraction: undefined, completionUnread: false }],
-	['s-pending-child', { running: true, pendingInteraction: undefined, completionUnread: false }]
+	['s-pending-child', { running: true, pendingInteraction: undefined, completionUnread: false }],
+	['s-root', { running: false, pendingInteraction: undefined, completionUnread: false }],
+	['s-child', { running: true, pendingInteraction: 'question', completionUnread: false }],
+	['s-neighbor', { running: true, pendingInteraction: undefined, completionUnread: false }]
 ]);
 
 const t = (key, params) => (params === undefined ? key : `${key}:${JSON.stringify(params)}`);
@@ -46,7 +55,7 @@ const t = (key, params) => (params === undefined ? key : `${key}:${JSON.stringif
 function testGroups() {
 	const groups = computeGroups({ sessions, workspaces, statuses, config });
 
-	assert.deepEqual([...groups.keys()].sort(), ['', 'ws-a', 'ws-b'], '只应有 A、B 与 Ungrouped 三个分组有标记');
+	assert.deepEqual([...groups.keys()].sort(), ['', 'ws-a', 'ws-b', 'ws-child', 'ws-neighbor', 'ws-parent'], '应含活动分组、树父级与 Ungrouped');
 	assert.equal(groups.get('ws-a').state, 'running', 'A 的主状态是正在运行');
 	assert.equal(groups.get('ws-a').counts.running, 1, 'A 只统计未归档的运行中会话');
 	assert.equal(groups.get('ws-a').counts.unread + groups.get('ws-a').counts.pending, 0, 'A 没有等待与未读');
@@ -55,7 +64,11 @@ function testGroups() {
 	assert.equal(groups.get('ws-b').counts.unread, 1);
 	assert.equal(groups.get('').state, 'running', '没有归属的会话归入 Ungrouped');
 	assert.equal(groups.get('ws-c'), undefined, '没有会话的工作区不该有标记');
-	console.log('✓ 分组、优先级、归档过滤');
+	assert.equal(groups.get('ws-parent').state, 'pending', '树父目录应聚合后代中的等待状态');
+	assert.deepEqual(groups.get('ws-parent').counts, { pending: 1, running: 0, unread: 0 }, '树父目录只显示后代活动会话，不错误计入根目录空闲会话');
+	assert.equal(groups.get('ws-parent').activeCount, 1, '后代会话在父目录中只计数一次');
+	assert.equal(groups.get('ws-neighbor').state, 'running', '相似路径前缀但不是祖先的工作区独立显示');
+	console.log('✓ 分组、优先级、归档过滤与树路径聚合');
 }
 
 /** 第二组断言：开关生效。 */
@@ -87,7 +100,7 @@ function testAggregateAndLabel() {
 	const groups = computeGroups({ sessions, workspaces, statuses, config });
 	const rail = aggregateState(groups);
 	assert.equal(rail.state, 'pending', '全局聚合优先级同样是 pending > running > unread');
-	assert.equal(rail.count, 4, '聚合计数 = A 运行 1 + B 等待 1 + B 未读 1 + Ungrouped 运行 1');
+	assert.equal(rail.count, 6, '窄条聚合仍按每个会话只计一次，不把树祖先副本重复计算');
 
 	for (const group of groups.values()) group.label = groupLabel(group, t);
 	assert.equal(groups.get('ws-a').label, 'running.one');
@@ -108,7 +121,7 @@ function testRobustness() {
 	assert.deepEqual([...toStatusMap({ a: { running: true } }).keys()], ['a'], '普通对象形态的状态表也能读');
 	assert.deepEqual(normalizeSessionList({ byId: { x: {} } }).ids, ['x'], '缺 ids 时用 byId 的键补齐');
 	assert.deepEqual(normalizeWorkspaceList(undefined).items, []);
-	assert.equal(computeGroups({ sessions, workspaces, statuses, config }).size, 3);
+	assert.equal(computeGroups({ sessions, workspaces, statuses, config }).size, 6);
 	console.log('✓ 缺字段与错类型的容错');
 }
 

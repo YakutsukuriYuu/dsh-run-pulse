@@ -16,6 +16,60 @@ const STATE_ORDER = Object.freeze(['pending', 'running', 'unread']);
 export const UNGROUPED_KEY = '';
 
 /**
+ * 规范化工作区路径，以便在 Windows、macOS 路径快照之间比较祖先关系。
+ * @param value - 原始路径。
+ * @returns 统一分隔符并移除尾部分隔符的路径。
+ */
+function normalizePath(value) {
+	if (typeof value !== 'string') return '';
+	const slash = value.replace(/\\/g, '/');
+	if (slash === '/') return slash;
+	return slash.replace(/\/+$/, '');
+}
+
+/**
+ * 返回路径的父目录；POSIX 根目录没有父级。
+ * @param path - 已规范化路径。
+ * @returns 父路径；没有父级时为 null。
+ */
+function parentPathOf(path) {
+	const index = path.lastIndexOf('/');
+	if (index < 0) return null;
+	if (index === 0) return path === '/' ? null : '/';
+	return path.slice(0, index);
+}
+
+/**
+ * 把子工作区的会话明细合并到树视图父工作区，避免重复计数同一会话。
+ * @param groups - 分组映射。
+ * @param parentKey - 父工作区 id。
+ * @param childGroup - 子工作区状态。
+ */
+function mergeGroup(groups, parentKey, childGroup) {
+	let parent = groups.get(parentKey);
+	if (parent === undefined) {
+		parent = { state: null, counts: { pending: 0, running: 0, unread: 0 }, activeCount: 0, sessionIds: [], titles: [], sessionStates: new Map() };
+		groups.set(parentKey, parent);
+	}
+	const seen = new Set(parent.sessionIds);
+	for (let i = 0; i < childGroup.sessionIds.length; i += 1) {
+		const id = childGroup.sessionIds[i];
+		if (seen.has(id)) continue;
+		seen.add(id);
+		parent.sessionIds.push(id);
+		parent.titles.push(childGroup.titles[i]);
+		const state = childGroup.sessionStates?.get(id);
+		if (state) parent.sessionStates.set(id, state);
+	}
+	parent.counts.pending = 0;
+	parent.counts.running = 0;
+	parent.counts.unread = 0;
+	for (const state of parent.sessionStates.values()) parent.counts[state] += 1;
+	parent.state = primaryState(parent.counts);
+	parent.activeCount = parent.counts.pending + parent.counts.running + parent.counts.unread;
+}
+
+/**
  * 安全地取一个快照/对象上的数组字段。
  * @param source - 可能是任意值的容器。
  * @param key - 字段名。
@@ -144,11 +198,13 @@ export function computeGroups(input) {
 		if (state === null) return;
 		let group = groups.get(key);
 		if (group === undefined) {
-			group = { state: null, counts: { pending: 0, running: 0, unread: 0 }, sessionIds: [], titles: [] };
+			group = { state: null, counts: { pending: 0, running: 0, unread: 0 }, sessionIds: [], titles: [], sessionStates: new Map() };
 			groups.set(key, group);
 		}
 		group.counts[state] += 1;
 		group.sessionIds.push(sessionId);
+		if (!group.sessionStates) group.sessionStates = new Map();
+		group.sessionStates.set(sessionId, state);
 		const title = list.byId[sessionId]?.displayTitle;
 		group.titles.push(typeof title === 'string' && title !== '' ? title : sessionId);
 	};
@@ -174,6 +230,35 @@ export function computeGroups(input) {
 		group.state = primaryState(group.counts);
 		group.activeCount = group.counts.pending + group.counts.running + group.counts.unread;
 	}
+
+	// 在项目树视图中，子工作区可能被折叠在父工作区下面。把后代工作区的
+	// 状态向父级路径聚合，这样即使整棵子树折叠，父目录仍能提示有活动会话。
+	// 普通平铺视图仍只会显示实际存在锚点的工作区，不会额外生成 DOM 行。
+	const workspaceByPath = new Map();
+	for (const workspace of workspaces.items) {
+		if (typeof workspace.path !== 'string' || workspace.path === '') continue;
+		workspaceByPath.set(normalizePath(workspace.path), workspace);
+	}
+	for (const workspace of workspaces.items) {
+		const workspaceId = typeof workspace.workspaceId === 'string' ? workspace.workspaceId : undefined;
+		if (workspaceId === undefined || workspaceId === '') continue;
+		const childPath = normalizePath(workspace.path);
+		if (childPath === '') continue;
+		const childGroup = groups.get(workspaceId);
+		if (childGroup === undefined) continue;
+		let parentPath = parentPathOf(childPath);
+		while (parentPath !== null) {
+			const parentWorkspace = workspaceByPath.get(parentPath);
+			if (parentWorkspace !== undefined && typeof parentWorkspace.workspaceId === 'string' && parentWorkspace.workspaceId !== workspaceId) {
+				mergeGroup(groups, parentWorkspace.workspaceId, childGroup);
+			}
+			parentPath = parentPathOf(parentPath);
+		}
+	}
+	for (const group of groups.values()) {
+		group.state = primaryState(group.counts);
+		group.activeCount = group.counts.pending + group.counts.running + group.counts.unread;
+	}
 	return groups;
 }
 
@@ -184,10 +269,14 @@ export function computeGroups(input) {
  */
 export function aggregateState(groups) {
 	const totals = { pending: 0, running: 0, unread: 0 };
+	const seenSessions = new Set();
 	for (const group of groups.values()) {
-		totals.pending += group.counts.pending;
-		totals.running += group.counts.running;
-		totals.unread += group.counts.unread;
+		for (const sessionId of group.sessionIds) {
+			if (seenSessions.has(sessionId)) continue;
+			seenSessions.add(sessionId);
+			const state = group.sessionStates?.get(sessionId);
+			if (state) totals[state] += 1;
+		}
 	}
 	return { state: primaryState(totals), count: totals.pending + totals.running + totals.unread };
 }
