@@ -1,15 +1,36 @@
 # dsh-run-pulse
 
-折叠的工作区（文件夹）里有会话在运行时，让这个文件夹自己「亮起来」。
+在 DSH 侧边栏中，为包含运行中、等待你处理或有未读完成会话的工作区显示状态提示。即使工作区已折叠，也能一眼看出哪些文件夹需要关注；侧边栏收成窄条时，提示也会显示在「展开侧边栏」按钮上。
 
-DSH 的侧边栏在会话被折叠后，看不出哪个文件夹里还有东西在跑：官方只把状态点画在
-**会话行**上，而折叠会把会话行藏起来。上游的 ui-workspace 也把这一点写进了已知限制
-（*Pending user interaction is not aggregated into collapsed groups*）。
+## 安装
 
-本插件补上这个空缺：在文件夹标题行尾部加一个**呼吸脉动的小圆点**，
-侧边栏整体收成窄条时，同一个提示会出现在「展开侧边栏」按钮上。
+本插件已在 **DSH 0.2.0** 版本下安装验证。
 
-## 效果
+**最推荐的安装方式：**在 DSH 的插件入口中输入以下地址并安装：
+
+```text
+github:YakutsukuriYuu/dsh-run-pulse
+```
+
+也可以通过终端从 GitHub 安装。固定到已验证的提交：
+
+```bash
+cd ~/.dsh/profiles/desktop
+pnpm add "github:YakutsukuriYuu/dsh-run-pulse#2df9604"
+```
+
+或安装默认分支的最新提交：
+
+```bash
+cd ~/.dsh/profiles/desktop
+pnpm add "github:YakutsukuriYuu/dsh-run-pulse"
+```
+
+通过终端安装后，还需要确保 `dsh-run-pulse` 已加入 profile 的 `dsh.profile.bundles` 列表；DSH 插件入口安装会自动处理启用。安装完成后重启 DSH。GitHub 包已包含构建产物，无需手动构建。
+
+## 功能效果
+
+DSH 官方只在**会话行**上显示状态点；折叠工作区后会话行被隐藏，因此无法看出文件夹内会话的状态。本插件为工作区标题行补上状态提示：
 
 | 情况 | 表现 |
 | --- | --- |
@@ -24,18 +45,12 @@ DSH 的侧边栏在会话被折叠后，看不出哪个文件夹里还有东西�
 
 鼠标悬停在文件夹行上会看到具体说明（如「2 个会话在等你操作」）。
 
-## 它是怎么做到的（以及不会做什么）
+## 实现方式
 
-- **不改动官方 UI**：不注册 slot、不重写侧边栏、不替换任何官方组件。
-- **数据来自官方数据层**：`sessions.list`、`workspaces.list`、`sessionStatus`
-  三个可观察快照，订阅后任何变化都会触发一次幂等重绘。
-- **DOM 装饰**：只认官方给的稳定锚点 `[data-row-key^="workspace:"]`
-  （`key` 就是 workspaceId），在当前行末尾追加一个
-  `pointer-events: none` + `aria-hidden="true"` 的纯装饰节点。
-- **零侵入交互**：标记不吃点击、不进 tab 焦点、不改变「点文件夹行 = 展开/折叠」，
-  也不给读屏增加噪音；配色全部走官方主题 token，浅色/深色自动跟随。
-- **静默降级**：找不到锚点、数据源缺失、配置写错，都只是不显示标记，
-  绝不影响侧边栏本身；插件卸载时会移掉所有自己插入的节点与样式。
+- **不改动官方 UI**：不注册 slot、不重写侧边栏、不替换官方组件。
+- **读取官方数据层**：使用 `sessions.list`、`workspaces.list`、`sessionStatus` 快照，数据变化时触发幂等重绘。
+- **装饰工作区行**：定位 `[data-row-key^="workspace:"]`，在行尾添加纯装饰节点；不拦截点击、不进入键盘焦点，也不向读屏器播报。
+- **跟随主题并安全降级**：颜色使用官方主题 token；找不到锚点或数据源时只隐藏提示，不影响侧边栏。卸载时会清理插件添加的节点与样式。
 
 ## 源码与产物（改代码前必读）
 
@@ -86,24 +101,6 @@ npm test        # check + 四个自检
 本包暂时**没有** schemastery 的 JSON Schema，所以设置页里不会出现自动生成的配置表单
 （Host 半边是空实现）。以后要做表单，把 schema 加到 Host 半边即可，
 Client 侧的读取逻辑不用动。
-
-## 安装
-
-和其它本地插件一样，通过 profile 链接安装：
-
-1. `~/.dsh/profiles/desktop/package.json`：
-
-   ```json
-   {
-     "dependencies": {
-       "dsh-run-pulse": "link:/Users/yakutsukuriyuu/Documents/Harness/dsh插件制作/dsh-run-pulse"
-     },
-     "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-run-pulse"] } }
-   }
-   ```
-
-2. 在 profile 目录执行 `pnpm install`（或直接用 DSH 的插件管理器安装本地包）。
-3. 重启会话 / 重开窗口后生效。
 
 ## 开发自检
 
